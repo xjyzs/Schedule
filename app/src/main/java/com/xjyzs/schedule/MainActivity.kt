@@ -295,7 +295,7 @@ fun MainUI(modifier: Modifier = Modifier,viewModel: MainViewModel) {
                 }
                 Box(Modifier.fillMaxSize()) {
                     for (i in viewModel.courses) {
-                        if (i.get("startWeek").asInt <= viewModel.week && i.get("endWeek").asInt >= viewModel.week) {
+                        if (i.get("startWeek").asInt <= viewModel.week && i.get("endWeek").asInt >= viewModel.week && (i.get("weekStrategy").asInt != 1 || viewModel.week%2==1)) {
                             Row {
                                 if (i.get("weeks").asInt != 1) {
                                     Spacer(Modifier.weight(i.get("weeks").asFloat - 1))
