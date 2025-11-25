@@ -1,3 +1,3 @@
 # 大连海事大学课程表
 ## 支持学分显示
-## authorization 可通过抓包海大在线获取
+## authorization 可通过抓包海大在线获取或使用 root 权限自动获取
