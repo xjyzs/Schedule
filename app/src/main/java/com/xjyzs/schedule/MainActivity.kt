@@ -1,7 +1,6 @@
 package com.xjyzs.schedule
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.os.Bundle
 import android.util.Base64
 import android.widget.Toast
@@ -20,6 +19,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -59,6 +60,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.xjyzs.schedule.ui.theme.ScheduleTheme
+import com.xjyzs.schedule.utils.fetchToken
+import com.xjyzs.schedule.utils.parseJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -97,8 +100,9 @@ class MainActivity : ComponentActivity() {
 
 
 @Composable
-fun MainUI(modifier: Modifier = Modifier,viewModel: MainViewModel) {
+fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     var dialogExpanded by remember { mutableStateOf(false) }
+    var rootDialogExpanded by remember { mutableStateOf(false) }
     var currentCourse by remember { mutableStateOf("") }
     var currentTeacher by remember { mutableStateOf("") }
     var currentClassroom by remember { mutableStateOf("") }
@@ -108,8 +112,12 @@ fun MainUI(modifier: Modifier = Modifier,viewModel: MainViewModel) {
     var expireTime by remember { mutableLongStateOf(0) }
     val context = LocalContext.current
     val pref = context.getSharedPreferences("main", Context.MODE_PRIVATE)
-    var authorization by remember { mutableStateOf(pref.getString("authorization","")!!) }
+    var authorization by remember { mutableStateOf("") }
     var load by remember { mutableStateOf(false) }
+    val pagerState = rememberPagerState(
+        initialPage = viewModel.week,
+        pageCount = { 2147483647 }
+    )
     val formatter = DateTimeFormatter.ofPattern("MM-dd")
         .withZone(ZoneId.systemDefault())
     val formatterFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
@@ -128,61 +136,120 @@ fun MainUI(modifier: Modifier = Modifier,viewModel: MainViewModel) {
     )
     val h = 100
     val weekLst = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
-    fun getDetails(authorization: String){
+    fun getDetails(authorization: String) {
         try {
             val jsonBase64 = authorization.split(".")[1]
             val jsonStr = String(Base64.decode(jsonBase64, Base64.DEFAULT))
             val jsonObject = Gson().fromJson(jsonStr, JsonObject::class.java)
             id = jsonObject.get("jti").asString
             expireTime = jsonObject.get("exp").asLong
-        }catch (_: Exception){
+        } catch (_: Exception) {
             id = ""
             expireTime = 0
         }
     }
     LaunchedEffect(Unit) {
         try {
-            val str=pref.getString("coursesJson", "")!!
+            val str = pref.getString("coursesJson", "")!!
             if (str.isNotEmpty()) {
-                parseJson(str, viewModel, context, pref,isFromNetwork = false)
+                parseJson(str, viewModel, context, pref, isFromNetwork = false)
+                viewModel.isLoading = false
             }
-        }catch (_: Exception){}
+        } catch (_: Exception) {
+        }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.viewModelScope.launch(Dispatchers.IO) {
+            authorization = pref.getString("authorization", "")!!
+            getDetails(authorization)
+            if (System.currentTimeMillis() > expireTime * 1000) {
+                try {
+                    authorization = fetchToken(viewModel)
+                } catch (e: Exception) {
+                    if (e.message?.contains("denied") == true) {
+                        if (!pref.getBoolean("doNotShowRootDialog", false)) {
+                            rootDialogExpanded = true
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                context,
+                                e.message,
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+                viewModel.isLoading = false
+                pref.edit {
+                    putString("authorization", authorization)
+                }
+                getDetails(authorization)
+            }
+            if (authorization.length <= 10) {
+                viewModel.viewModelScope.launch(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        "请点击右上角 + 按钮添加 authorization",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            load = !load
+        }
     }
     LaunchedEffect(load) {
-        viewModel.isLoading = true
-        val client = OkHttpClient()
-        val request = Request.Builder()
-            .url("https://wx.dlmu.edu.cn/weapp/api/v1/academic/courseTake")
-            .get()
-            .addHeader(
-                "User-Agent",
-                "Mozilla/5.0 (Linux; Android 15; 22041216C Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 XWEB/1160117 MMWEBSDK/20250201 MMWEBID/8832 MicroMessenger/8.0.60.2840(0x28003C40) WeChat/arm64 Weixin GPVersion/1 NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android"
-            )
-            .addHeader("Accept-Encoding", "gzip,compress,br,deflate")
-            .addHeader(
-                "authorization",
-                pref.getString("authorization","Bearer")!!
-            )
-            .addHeader("charset", "utf-8")
-            .addHeader("x-client-version", "1.4.18")
-            .addHeader("content-type", "application/json")
-            .addHeader("Referer", "https://servicewechat.com/wx3bf7324a6ede01d3/86/page-frame.html")
-            .build()
-        viewModel.viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val resp = client.newCall(request).execute().body.string()
-                parseJson(resp, viewModel, context, pref, isFromNetwork = true)
-            } catch (_: Exception) {
+        if (authorization.length > 10) {
+            viewModel.isLoading = true
+            val client = OkHttpClient()
+            val request = Request.Builder()
+                .url("https://wx.dlmu.edu.cn/weapp/api/v1/academic/courseTake")
+                .get()
+                .addHeader(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 15; 22041216C Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 XWEB/1160117 MMWEBSDK/20250201 MMWEBID/8832 MicroMessenger/8.0.60.2840(0x28003C40) WeChat/arm64 Weixin GPVersion/1 NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android"
+                )
+                .addHeader("Accept-Encoding", "gzip,compress,br,deflate")
+                .addHeader(
+                    "authorization",
+                    authorization
+                )
+                .addHeader("charset", "utf-8")
+                .addHeader("x-client-version", "1.4.18")
+                .addHeader("content-type", "application/json")
+                .addHeader(
+                    "Referer",
+                    "https://servicewechat.com/wx3bf7324a6ede01d3/86/page-frame.html"
+                )
+                .build()
+            viewModel.viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val resp = client.newCall(request).execute().body.string()
+                    parseJson(resp, viewModel, context, pref, isFromNetwork = true)
+                } catch (_: Exception) {
+                }
+                viewModel.isLoading = false
             }
+        } else {
             viewModel.isLoading = false
+        }
+    }
+    LaunchedEffect(viewModel.week) {
+        viewModel.weekModified = true
+        if (viewModel.week != pagerState.currentPage) {
+            pagerState.animateScrollToPage(viewModel.week)
+        }
+    }
+    LaunchedEffect(pagerState.currentPage) {
+        if (viewModel.week != pagerState.currentPage) {
+            viewModel.week = pagerState.currentPage
         }
     }
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         IconButton({
             modifyExpanded = true
-            getDetails(authorization)
         }) {
-            Icon(Icons.Default.Add,null)
+            Icon(Icons.Default.Add, null)
         }
     }
     if (dialogExpanded) {
@@ -198,10 +265,28 @@ fun MainUI(modifier: Modifier = Modifier,viewModel: MainViewModel) {
             },
             confirmButton = {})
     }
-    if (modifyExpanded){
+    if (rootDialogExpanded) {
         AlertDialog(
-            onDismissRequest = {modifyExpanded=false},
-            title = {Text("修改 authorization")},
+            onDismissRequest = { rootDialogExpanded = false },
+            title = { Text("从海大在线自动获取 authorization") },
+            text = {
+                Text("该功能需要 root 权限")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pref.edit {
+                        putBoolean(
+                            "doNotShowRootDialog",
+                            true
+                        )
+                    };rootDialogExpanded = false
+                }) { Text("不再提示") }
+            })
+    }
+    if (modifyExpanded) {
+        AlertDialog(
+            onDismissRequest = { modifyExpanded = false },
+            title = { Text("修改 authorization") },
             text = {
                 Column {
                     OutlinedTextField(
@@ -225,32 +310,32 @@ fun MainUI(modifier: Modifier = Modifier,viewModel: MainViewModel) {
                         Text("账号: $id")
                     }
                     if (expireTime > 0) {
-                        Text("失效时间: ${formatterFull.format( Instant.ofEpochMilli(expireTime*1000))}")
+                        Text("失效时间: ${formatterFull.format(Instant.ofEpochMilli(expireTime * 1000))}")
                     }
                 }
             },
-            confirmButton = {TextButton({
-                pref.edit{
-                    putString("authorization",authorization)
-                    modifyExpanded=false
-                    load=!load
-                }
-            }) {Text("确认")}},
-            dismissButton = {TextButton({modifyExpanded=false}) {Text("取消")}}
+            confirmButton = {
+                TextButton({
+                    pref.edit {
+                        putString("authorization", authorization)
+                        modifyExpanded = false
+                        load = !load
+                    }
+                }) { Text("确认") }
+            },
+            dismissButton = { TextButton({ modifyExpanded = false }) { Text("取消") } }
         )
     }
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
-            TextButton({ viewModel.week -= 1
-            viewModel.weekModified=true}) {
+            TextButton({ viewModel.week -= 1 }) {
                 Text("<上一周")
             }
             Spacer(Modifier.size(36.dp))
             Text("第 ${viewModel.week} 周", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.size(36.dp))
-            TextButton({ viewModel.week += 1
-            viewModel.weekModified=true}) {
+            TextButton({ viewModel.week += 1 }) {
                 Text("下一周>")
             }
             Spacer(Modifier.weight(1f))
@@ -293,67 +378,80 @@ fun MainUI(modifier: Modifier = Modifier,viewModel: MainViewModel) {
                         c += 1
                     }
                 }
-                Box(Modifier.fillMaxSize()) {
-                    for (i in viewModel.courses) {
-                        if (i.get("startWeek").asInt <= viewModel.week && i.get("endWeek").asInt >= viewModel.week && (i.get("weekStrategy").asInt != 1 || viewModel.week%2==1)) {
-                            Row {
-                                if (i.get("weeks").asInt != 1) {
-                                    Spacer(Modifier.weight(i.get("weeks").asFloat - 1))
-                                }
-                                Column(Modifier.weight(1f).padding(1.dp)) {
-                                    val localCredit = i.get("credits").asFloat
-                                    if (i.get("startSection").asInt != 1) {
-                                        Spacer(Modifier.height(h * (i.get("startSection").asInt - 1).dp))
+                HorizontalPager(state = pagerState) { week ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(h.dp * timeLst.size)
+                    ) {
+                        for (i in viewModel.courses) {
+                            if (i.get("startWeek").asInt <= week && i.get("endWeek").asInt >= week && (i.get(
+                                    "weekStrategy"
+                                ).asInt != 1 || week % 2 == 1)
+                            ) {
+                                Row {
+                                    if (i.get("weeks").asInt != 1) {
+                                        Spacer(Modifier.weight(i.get("weeks").asFloat - 1))
                                     }
-                                    Spacer(Modifier.height(0.5.dp))
-                                    Box(
+                                    Column(
                                         Modifier
-                                            .background(
-                                                shape = RoundedCornerShape(4.dp),
-                                                color = if (localCredit >= 4) {
-                                                    Color(0xFFFFC90E)
-                                                } else if (localCredit == 3.0f) {
-                                                    Color(0xFF3487FF)
-                                                } else if (localCredit == 2.0f) {
-                                                    Color(0xFF6CE647)
-                                                } else if (localCredit == 1.0f) {
-                                                    Color(0xFFA4FF90)
-                                                } else {
-                                                    Color(0xFFC3C3C3)
-                                                }
-                                            )
-                                            .clickable {
-                                                currentTeacher = i.get("teacher").asString
-                                                currentCourse = i.get("name").asString
-                                                currentClassroom = i.get("classroom").asString
-                                                currentCredit = i.get("credits").asString
-                                                dialogExpanded = true
-                                            }
-                                            .height(
-                                                (h - 1) * (i.get("endSection").asInt - i.get(
-                                                    "startSection"
-                                                ).asInt + 1).dp
-                                            )
+                                            .weight(1f)
+                                            .padding(1.dp)
                                     ) {
-                                        Column {
-                                            Text(
-                                                "${i.get("name").asString}@${i.get("classroom").asString}".toCharArray()
-                                                    .joinToString("\u200B"),
-                                                fontSize = 14.sp
-                                            )
-                                            Text(
-                                                i.get(
-                                                    "teacher"
-                                                ).asString,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFF666666)
-                                            )
+                                        val localCredit = i.get("credits").asFloat
+                                        if (i.get("startSection").asInt != 1) {
+                                            Spacer(Modifier.height(h * (i.get("startSection").asInt - 1).dp))
                                         }
+                                        Spacer(Modifier.height(0.5.dp))
+                                        Box(
+                                            Modifier
+                                                .background(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = if (localCredit >= 4) {
+                                                        Color(0xFFFFC90E)
+                                                    } else if (localCredit == 3.0f) {
+                                                        Color(0xFF3487FF)
+                                                    } else if (localCredit == 2.0f) {
+                                                        Color(0xFF6CE647)
+                                                    } else if (localCredit == 1.0f) {
+                                                        Color(0xFFA4FF90)
+                                                    } else {
+                                                        Color(0xFFC3C3C3)
+                                                    }
+                                                )
+                                                .clickable {
+                                                    currentTeacher = i.get("teacher").asString
+                                                    currentCourse = i.get("name").asString
+                                                    currentClassroom = i.get("classroom").asString
+                                                    currentCredit = i.get("credits").asString
+                                                    dialogExpanded = true
+                                                }
+                                                .height(
+                                                    (h - 1) * (i.get("endSection").asInt - i.get(
+                                                        "startSection"
+                                                    ).asInt + 1).dp
+                                                )
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    "${i.get("name").asString}@${i.get("classroom").asString}".toCharArray()
+                                                        .joinToString("\u200B"),
+                                                    fontSize = 14.sp
+                                                )
+                                                Text(
+                                                    i.get(
+                                                        "teacher"
+                                                    ).asString,
+                                                    fontSize = 14.sp,
+                                                    color = Color(0xFF666666)
+                                                )
+                                            }
+                                        }
+                                        Spacer(Modifier.height(0.5.dp))
                                     }
-                                    Spacer(Modifier.height(0.5.dp))
-                                }
-                                if (i.get("weeks").asInt != 7) {
-                                    Spacer(Modifier.weight(7 - i.get("weeks").asFloat))
+                                    if (i.get("weeks").asInt != 7) {
+                                        Spacer(Modifier.weight(7 - i.get("weeks").asFloat))
+                                    }
                                 }
                             }
                         }
@@ -363,50 +461,12 @@ fun MainUI(modifier: Modifier = Modifier,viewModel: MainViewModel) {
         }
     }
     if (viewModel.isLoading) {
-        Row(modifier.fillMaxWidth().padding(96.dp), horizontalArrangement = Arrangement.Center) {
+        Row(
+            modifier
+                .fillMaxWidth()
+                .padding(96.dp), horizontalArrangement = Arrangement.Center
+        ) {
             CircularProgressIndicator(Modifier.size(36.dp))
-        }
-    }
-}
-
-suspend fun parseJson(str: String, viewModel: MainViewModel, context: Context,pref: SharedPreferences,isFromNetwork: Boolean) {
-    try {
-        val gson = Gson()
-        val jsonObject = gson.fromJson(str, JsonObject::class.java)
-        if (jsonObject.get("code").asInt == 200) {
-            if (isFromNetwork) {
-                pref.edit {
-                    putString("coursesJson", str)
-                    putLong("lastRefresh", System.currentTimeMillis())
-                }
-            }
-            val jsonObjectData =
-                jsonObject.get("data").asJsonObject
-            viewModel.semesterBeginAt = jsonObjectData.get("semesterBeginAt").asLong
-            if (Instant.ofEpochMilli(viewModel.semesterBeginAt)
-                    .atZone(ZoneId.systemDefault())
-                    .dayOfWeek.value != 1
-            ) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "semesterBeginAt 获取失败！", Toast.LENGTH_SHORT).show()
-                }
-            }
-            if (!viewModel.weekModified) {
-                viewModel.week =
-                    ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 86400000 / 7 + 1).toInt()
-            }
-            val localCourses = jsonObjectData.get("courses").asJsonArray
-            for (i in localCourses) {
-                viewModel.courses.add(i.asJsonObject)
-            }
-        } else {
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, jsonObject.get("msg").asString, Toast.LENGTH_SHORT).show()
-            }
-        }
-    } catch (e: Exception) {
-        withContext(Dispatchers.Main) {
-            Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show()
         }
     }
 }
