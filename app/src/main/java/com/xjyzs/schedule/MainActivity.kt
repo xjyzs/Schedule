@@ -78,6 +78,7 @@ class MainViewModel : ViewModel() {
     var semesterBeginAt by mutableLongStateOf(0)
     var week by mutableIntStateOf(1)
     var weekModified by mutableStateOf(false)
+    var enablePageSwitchAnimation by mutableStateOf(true)
 }
 
 class MainActivity : ComponentActivity() {
@@ -235,13 +236,18 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         }
     }
     LaunchedEffect(viewModel.week) {
-        viewModel.weekModified = true
         if (viewModel.week != pagerState.currentPage) {
-            pagerState.animateScrollToPage(viewModel.week)
+            if (viewModel.enablePageSwitchAnimation) {
+                pagerState.animateScrollToPage(viewModel.week)
+            }else{
+                pagerState.scrollToPage(viewModel.week)
+                viewModel.enablePageSwitchAnimation=true
+            }
         }
     }
     LaunchedEffect(pagerState.currentPage) {
         if (viewModel.week != pagerState.currentPage) {
+            viewModel.weekModified = true
             viewModel.week = pagerState.currentPage
         }
     }

@@ -104,6 +104,7 @@ suspend fun parseJson(
                 }
             }
             if (!viewModel.weekModified) {
+                viewModel.enablePageSwitchAnimation=false
                 viewModel.week =
                     ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 86400000 / 7 + 1).toInt()
             }
