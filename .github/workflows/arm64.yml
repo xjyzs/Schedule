@@ -36,7 +36,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           echo "${{ secrets.RELEASE_SIGNING_KEY }}" | base64 --decode > keystore.jks
-          ./gradlew assembleArm64Release
+          ./gradlew assembleArm64Minsdk35Release
 
       - name: Extract version from build.gradle.kts
         id: version

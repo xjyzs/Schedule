@@ -2,6 +2,7 @@ package com.xjyzs.schedule.utils
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
 import android.widget.Toast
 import androidx.core.content.edit
 import com.google.gson.Gson
@@ -38,7 +39,16 @@ fun fetchToken(viewModel: MainViewModel): String {
         outputStream.flush()
         val str = readBytesUntil(process.inputStream, "__END__").toString(Charsets.US_ASCII)
         val matchResult = re.findAll(str)
-        token = matchResult.lastOrNull()?.groups["token"]?.value ?: ""
+        for (j in matchResult) {
+            token = j.groups["token"]?.value ?: ""
+            val jsonBase64 = token.split(".")[1]
+            val jsonStr = String(Base64.decode(jsonBase64, Base64.DEFAULT))
+            val jsonObject = Gson().fromJson(jsonStr, JsonObject::class.java)
+            val expireTime = jsonObject.get("exp").asLong
+            if (expireTime > System.currentTimeMillis()/1000){
+                break
+            }
+        }
     }
     return "Bearer $token"
 }

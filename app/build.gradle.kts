@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.xjyzs.schedule"
-        minSdk = 33
+        minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -56,9 +56,22 @@ android {
             ndk { abiFilters.add("armeabi-v7a") }
             this.signingConfig = signingConfig
         }
-        create("arm64") {
+        create("arm64Minsdk35") {
             dimension = "abi"
             ndk { abiFilters.add("arm64-v8a") }
+            minSdk=35
+            this.signingConfig = signingConfig
+        }
+        create("arm64Minsdk29") {
+            dimension = "abi"
+            ndk { abiFilters.add("arm64-v8a") }
+            minSdk=29
+            this.signingConfig = signingConfig
+        }
+        create("arm64Minsdk26") {
+            dimension = "abi"
+            ndk { abiFilters.add("arm64-v8a") }
+            minSdk=26
             this.signingConfig = signingConfig
         }
         create("universal") {
