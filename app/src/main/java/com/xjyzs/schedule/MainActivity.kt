@@ -335,13 +335,13 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
-            TextButton({ viewModel.week -= 1 }) {
+            TextButton({ viewModel.week -= 1;viewModel.weekModified=true }) {
                 Text("<上一周")
             }
             Spacer(Modifier.size(36.dp))
             Text("第 ${viewModel.week} 周", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.size(36.dp))
-            TextButton({ viewModel.week += 1 }) {
+            TextButton({ viewModel.week += 1;viewModel.weekModified=true }) {
                 Text("下一周>")
             }
             Spacer(Modifier.weight(1f))
