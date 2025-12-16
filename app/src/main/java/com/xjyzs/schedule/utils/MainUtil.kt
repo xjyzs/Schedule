@@ -50,7 +50,6 @@ fun fetchToken(viewModel: MainViewModel): String {
             }
         }
     }
-    viewModel.enablePageSwitchAnimation=true
     return "Bearer $token"
 }
 
@@ -118,6 +117,7 @@ suspend fun parseJson(
                 viewModel.enablePageSwitchAnimation=false
                 viewModel.week =
                     ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 86400000 / 7 + 1).toInt()
+                viewModel.enablePageSwitchAnimation=true
             }
             val localCourses = jsonObjectData.get("courses").asJsonArray
             for (i in localCourses) {
