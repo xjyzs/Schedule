@@ -50,6 +50,7 @@ fun fetchToken(viewModel: MainViewModel): String {
             }
         }
     }
+    viewModel.enablePageSwitchAnimation=true
     return "Bearer $token"
 }
 
