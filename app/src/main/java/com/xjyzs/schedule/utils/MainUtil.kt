@@ -114,10 +114,9 @@ suspend fun parseJson(
                 }
             }
             if (!viewModel.weekModified) {
-                viewModel.enablePageSwitchAnimation=false
                 viewModel.week =
-                    ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 86400000 / 7 + 1).toInt()
-                viewModel.enablePageSwitchAnimation=true
+                    ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 604800000 + 1).toInt()
+                println(viewModel.week)
             }
             val localCourses = jsonObjectData.get("courses").asJsonArray
             for (i in localCourses) {

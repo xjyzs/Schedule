@@ -78,7 +78,7 @@ class MainViewModel : ViewModel() {
     var semesterBeginAt by mutableLongStateOf(0)
     var week by mutableIntStateOf(1)
     var weekModified by mutableStateOf(false)
-    var enablePageSwitchAnimation by mutableStateOf(true)
+    var enablePageSwitchAnimation by mutableStateOf(false)
 }
 
 class MainActivity : ComponentActivity() {
@@ -241,7 +241,6 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                 pagerState.animateScrollToPage(viewModel.week)
             }else{
                 pagerState.scrollToPage(viewModel.week)
-                viewModel.enablePageSwitchAnimation=true
             }
         }
     }
@@ -335,13 +334,13 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
-            TextButton({ viewModel.week -= 1;viewModel.weekModified=true }) {
+            TextButton({ viewModel.enablePageSwitchAnimation=true;viewModel.week -= 1;viewModel.weekModified=true }) {
                 Text("<上一周")
             }
             Spacer(Modifier.size(36.dp))
             Text("第 ${viewModel.week} 周", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.size(36.dp))
-            TextButton({ viewModel.week += 1;viewModel.weekModified=true }) {
+            TextButton({ viewModel.enablePageSwitchAnimation=true;viewModel.week += 1;viewModel.weekModified=true }) {
                 Text("下一周>")
             }
             Spacer(Modifier.weight(1f))
