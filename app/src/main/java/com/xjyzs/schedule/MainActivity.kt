@@ -167,7 +167,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                 try {
                     authorization = fetchToken(viewModel)
                 } catch (e: Exception) {
-                    if (e.message?.contains("denied") == true) {
+                    if (e.message?.contains("denied") == true || e.message?.contains("run program \"su\"") == true) {
                         if (!pref.getBoolean("doNotShowRootDialog", false)) {
                             rootDialogExpanded = true
                         }
@@ -239,7 +239,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         if (viewModel.week != pagerState.currentPage) {
             if (viewModel.enablePageSwitchAnimation) {
                 pagerState.animateScrollToPage(viewModel.week)
-            }else{
+            } else {
                 pagerState.scrollToPage(viewModel.week)
             }
         }
@@ -273,9 +273,12 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     if (rootDialogExpanded) {
         AlertDialog(
             onDismissRequest = { rootDialogExpanded = false },
-            title = { Text("从海大在线自动获取 authorization") },
+            title = { Text("「推荐」从海大在线自动获取 authorization") },
             text = {
-                Text("该功能需要 root 权限")
+                Column {
+                    Text("该功能需要 root 权限")
+                    Text("需要在 3 天内成功登录过海大在线")
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -284,7 +287,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                             "doNotShowRootDialog",
                             true
                         )
-                    };rootDialogExpanded = false
+                    }; rootDialogExpanded = false
                 }) { Text("不再提示") }
             })
     }
@@ -334,13 +337,19 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
-            TextButton({ viewModel.enablePageSwitchAnimation=true;viewModel.week -= 1;viewModel.weekModified=true }) {
+            TextButton({
+                viewModel.enablePageSwitchAnimation =
+                    true; viewModel.week -= 1; viewModel.weekModified = true
+            }) {
                 Text("<上一周")
             }
             Spacer(Modifier.size(36.dp))
             Text("第 ${viewModel.week} 周", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.size(36.dp))
-            TextButton({ viewModel.enablePageSwitchAnimation=true;viewModel.week += 1;viewModel.weekModified=true }) {
+            TextButton({
+                viewModel.enablePageSwitchAnimation =
+                    true; viewModel.week += 1; viewModel.weekModified = true
+            }) {
                 Text("下一周>")
             }
             Spacer(Modifier.weight(1f))
@@ -436,6 +445,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                                                         "startSection"
                                                     ).asInt + 1).dp
                                                 )
+                                                .fillMaxWidth()
                                         ) {
                                             Column {
                                                 Text(
