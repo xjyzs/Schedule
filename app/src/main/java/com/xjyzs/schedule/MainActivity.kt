@@ -68,6 +68,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -90,8 +91,7 @@ class MainActivity : ComponentActivity() {
             ScheduleTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainUI(
-                        modifier = Modifier.padding(innerPadding),
-                        viewModel
+                        modifier = Modifier.padding(innerPadding), viewModel
                     )
                 }
             }
@@ -116,13 +116,10 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     var authorization by remember { mutableStateOf("") }
     var load by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(
-        initialPage = viewModel.week,
-        pageCount = { 2147483647 }
-    )
-    val formatter = DateTimeFormatter.ofPattern("MM-dd")
-        .withZone(ZoneId.systemDefault())
-    val formatterFull = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-        .withZone(ZoneId.systemDefault())
+        initialPage = viewModel.week - 1, pageCount = { 2147483647 })
+    val formatter = DateTimeFormatter.ofPattern("MM-dd").withZone(ZoneId.systemDefault())
+    val formatterFull =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault())
     val timeLst = listOf(
         "08:00\n08:45",
         "08:50\n09:35",
@@ -174,9 +171,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                     } else {
                         withContext(Dispatchers.Main) {
                             Toast.makeText(
-                                context,
-                                e.message,
-                                Toast.LENGTH_SHORT
+                                context, e.message, Toast.LENGTH_SHORT
                             ).show()
                         }
                     }
@@ -190,9 +185,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
             if (authorization.length <= 10) {
                 viewModel.viewModelScope.launch(Dispatchers.Main) {
                     Toast.makeText(
-                        context,
-                        "请点击右上角 + 按钮添加 authorization",
-                        Toast.LENGTH_SHORT
+                        context, "请点击右上角 + 按钮添加 authorization", Toast.LENGTH_SHORT
                     ).show()
                 }
             }
@@ -203,26 +196,17 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         if (authorization.length > 10) {
             viewModel.isLoading = true
             val client = OkHttpClient()
-            val request = Request.Builder()
-                .url("https://wx.dlmu.edu.cn/weapp/api/v1/academic/courseTake")
-                .get()
-                .addHeader(
-                    "User-Agent",
-                    "Mozilla/5.0 (Linux; Android 15; 22041216C Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 XWEB/1160117 MMWEBSDK/20250201 MMWEBID/8832 MicroMessenger/8.0.60.2840(0x28003C40) WeChat/arm64 Weixin GPVersion/1 NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android"
-                )
-                .addHeader("Accept-Encoding", "gzip,compress,br,deflate")
-                .addHeader(
-                    "authorization",
-                    authorization
-                )
-                .addHeader("charset", "utf-8")
-                .addHeader("x-client-version", "1.4.18")
-                .addHeader("content-type", "application/json")
-                .addHeader(
-                    "Referer",
-                    "https://servicewechat.com/wx3bf7324a6ede01d3/86/page-frame.html"
-                )
-                .build()
+            val request =
+                Request.Builder().url("https://wx.dlmu.edu.cn/weapp/api/v1/academic/courseTake")
+                    .get().addHeader(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 15; 22041216C Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 XWEB/1160117 MMWEBSDK/20250201 MMWEBID/8832 MicroMessenger/8.0.60.2840(0x28003C40) WeChat/arm64 Weixin GPVersion/1 NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android"
+                    ).addHeader("Accept-Encoding", "gzip,compress,br,deflate").addHeader(
+                        "authorization", authorization
+                    ).addHeader("charset", "utf-8").addHeader("x-client-version", "1.4.18")
+                    .addHeader("content-type", "application/json").addHeader(
+                        "Referer", "https://servicewechat.com/wx3bf7324a6ede01d3/86/page-frame.html"
+                    ).build()
             viewModel.viewModelScope.launch(Dispatchers.IO) {
                 try {
                     val resp = client.newCall(request).execute().body.string()
@@ -236,18 +220,18 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         }
     }
     LaunchedEffect(viewModel.week) {
-        if (viewModel.week != pagerState.currentPage) {
+        if (viewModel.week != pagerState.currentPage + 1) {
             if (viewModel.enablePageSwitchAnimation) {
-                pagerState.animateScrollToPage(viewModel.week)
+                pagerState.animateScrollToPage(viewModel.week - 1)
             } else {
-                pagerState.scrollToPage(viewModel.week)
+                pagerState.scrollToPage(viewModel.week - 1)
             }
         }
     }
     LaunchedEffect(pagerState.currentPage) {
-        if (viewModel.week != pagerState.currentPage) {
+        if (viewModel.week != pagerState.currentPage + 1) {
             viewModel.weekModified = true
-            viewModel.week = pagerState.currentPage
+            viewModel.week = pagerState.currentPage + 1
         }
     }
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -284,8 +268,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                 TextButton(onClick = {
                     pref.edit {
                         putBoolean(
-                            "doNotShowRootDialog",
-                            true
+                            "doNotShowRootDialog", true
                         )
                     }; rootDialogExpanded = false
                 }) { Text("不再提示") }
@@ -297,13 +280,10 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
             title = { Text("修改 authorization") },
             text = {
                 Column {
-                    OutlinedTextField(
-                        authorization,
-                        {
-                            authorization = it
-                            getDetails(authorization)
-                        },
-                        placeholder = { Text("Bearer") })
+                    OutlinedTextField(authorization, {
+                        authorization = it
+                        getDetails(authorization)
+                    }, placeholder = { Text("Bearer") })
                     val lastRefreshTime = pref.getLong("lastRefresh", 0)
                     if (lastRefreshTime > 0) {
                         Text(
@@ -331,15 +311,16 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                     }
                 }) { Text("确认") }
             },
-            dismissButton = { TextButton({ modifyExpanded = false }) { Text("取消") } }
-        )
+            dismissButton = { TextButton({ modifyExpanded = false }) { Text("取消") } })
     }
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
             TextButton({
-                viewModel.enablePageSwitchAnimation =
-                    true; viewModel.week -= 1; viewModel.weekModified = true
+                if (viewModel.week > 1) {
+                    viewModel.enablePageSwitchAnimation =
+                        true; viewModel.week -= 1; viewModel.weekModified = true
+                }
             }) {
                 Text("<上一周")
             }
@@ -357,10 +338,11 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         Row {
             Spacer(Modifier.size(36.dp))
             var c = 0
-            for (i in weekLst) {
+            for (i in 1..weekLst.size) {
                 Text(
-                    "$i\n${formatter.format(Instant.ofEpochMilli(((viewModel.week - 1) * 604800000L + viewModel.semesterBeginAt + c)))}",
-                    color = MaterialTheme.colorScheme.outline,
+                    "${weekLst[i-1]}\n${formatter.format(Instant.ofEpochMilli(((viewModel.week - 1) * 604800000L + viewModel.semesterBeginAt + c)))}",
+                    color = if (i== LocalDate.now().dayOfWeek.value){
+                        MaterialTheme.colorScheme.primary}else{MaterialTheme.colorScheme.outline},
                     textAlign = TextAlign.Center,
                     fontSize = 12.sp,
                     lineHeight = 14.sp,
@@ -372,14 +354,12 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Row {
                 Column(
-                    Modifier
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    Modifier.background(MaterialTheme.colorScheme.surfaceContainerHighest)
                 ) {
                     var c = 1
                     for (i in timeLst) {
                         Box(
-                            modifier = Modifier.height(h.dp),
-                            contentAlignment = Alignment.Center
+                            modifier = Modifier.height(h.dp), contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 "$c\n$i",
@@ -392,16 +372,18 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                         c += 1
                     }
                 }
-                HorizontalPager(state = pagerState) { week ->
+                HorizontalPager(state = pagerState) { pageIndex ->
                     Box(
                         Modifier
                             .fillMaxWidth()
                             .height(h.dp * timeLst.size)
                     ) {
                         for (i in viewModel.courses) {
-                            if (i.get("startWeek").asInt <= week && i.get("endWeek").asInt >= week && (i.get(
+                            if (i.get("startWeek").asInt <= pageIndex + 1 && i.get("endWeek").asInt >= pageIndex + 1 && (i.get(
                                     "weekStrategy"
-                                ).asInt != 1 || week % 2 == 1)
+                                ).asInt == 2 || i.get("weekStrategy").asInt == 1 && (pageIndex + 1) % 2 == 1 || i.get(
+                                    "weekStrategy"
+                                ).asInt == 0 && (pageIndex + 1) % 2 == 0)
                             ) {
                                 Row {
                                     if (i.get("weeks").asInt != 1) {
@@ -445,13 +427,11 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                                                         "startSection"
                                                     ).asInt + 1).dp
                                                 )
-                                                .fillMaxWidth()
-                                        ) {
+                                                .fillMaxWidth()) {
                                             Column {
                                                 Text(
                                                     "${i.get("name").asString}@${i.get("classroom").asString}".toCharArray()
-                                                        .joinToString("\u200B"),
-                                                    fontSize = 14.sp
+                                                        .joinToString("\u200B"), fontSize = 14.sp
                                                 )
                                                 Text(
                                                     i.get(
