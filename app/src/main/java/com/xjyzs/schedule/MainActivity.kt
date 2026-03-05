@@ -8,7 +8,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,10 +45,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.times
@@ -60,6 +63,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.xjyzs.schedule.ui.theme.ScheduleTheme
+import com.xjyzs.schedule.utils.AnimatedExpandDialog
+import com.xjyzs.schedule.utils.clickToExpand
 import com.xjyzs.schedule.utils.fetchToken
 import com.xjyzs.schedule.utils.parseJson
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +107,9 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
+    var buttonRect by remember { mutableStateOf(Rect.Zero) }
+    var addButtonRect by remember { mutableStateOf(Rect.Zero) }
+    var rootSize by remember { mutableStateOf(IntSize.Zero) }
     var dialogExpanded by remember { mutableStateOf(false) }
     var rootDialogExpanded by remember { mutableStateOf(false) }
     var currentCourse by remember { mutableStateOf("") }
@@ -132,7 +140,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         "18:00\n18:45",
         "18:50\n19:35"
     )
-    val h = 100
+    val h = 90
     val weekLst = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
     fun getDetails(authorization: String) {
         try {
@@ -234,25 +242,19 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
             viewModel.week = pagerState.currentPage + 1
         }
     }
+    // 获取屏幕尺寸
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { rootSize = it.size })
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        IconButton({
-            modifyExpanded = true
-        }) {
+        IconButton(
+            onClick = { modifyExpanded = true },
+            modifier = Modifier.onGloballyPositioned { coordinates ->
+                addButtonRect = coordinates.boundsInRoot()
+            }) {
             Icon(Icons.Default.Add, null)
         }
-    }
-    if (dialogExpanded) {
-        AlertDialog(
-            onDismissRequest = { dialogExpanded = false },
-            title = { Text(currentCourse) },
-            text = {
-                Column {
-                    Text("教师: $currentTeacher")
-                    Text("教室: $currentClassroom")
-                    Text("学分: $currentCredit")
-                }
-            },
-            confirmButton = {})
     }
     if (rootDialogExpanded) {
         AlertDialog(
@@ -273,45 +275,6 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                     }; rootDialogExpanded = false
                 }) { Text("不再提示") }
             })
-    }
-    if (modifyExpanded) {
-        AlertDialog(
-            onDismissRequest = { modifyExpanded = false },
-            title = { Text("修改 authorization") },
-            text = {
-                Column {
-                    OutlinedTextField(authorization, {
-                        authorization = it
-                        getDetails(authorization)
-                    }, placeholder = { Text("Bearer") })
-                    val lastRefreshTime = pref.getLong("lastRefresh", 0)
-                    if (lastRefreshTime > 0) {
-                        Text(
-                            "上次刷新: ${
-                                formatterFull.format(
-                                    Instant.ofEpochMilli(lastRefreshTime)
-                                )
-                            }"
-                        )
-                    }
-                    if (id.isNotEmpty()) {
-                        Text("账号: $id")
-                    }
-                    if (expireTime > 0) {
-                        Text("失效时间: ${formatterFull.format(Instant.ofEpochMilli(expireTime * 1000))}")
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton({
-                    pref.edit {
-                        putString("authorization", authorization)
-                        modifyExpanded = false
-                        load = !load
-                    }
-                }) { Text("确认") }
-            },
-            dismissButton = { TextButton({ modifyExpanded = false }) { Text("取消") } })
     }
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -339,10 +302,17 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
             Spacer(Modifier.size(36.dp))
             var c = 0
             for (i in 1..weekLst.size) {
+                val date =
+                    formatter.format(Instant.ofEpochMilli(((viewModel.week - 1) * 604800000L + viewModel.semesterBeginAt + c)))
                 Text(
-                    "${weekLst[i-1]}\n${formatter.format(Instant.ofEpochMilli(((viewModel.week - 1) * 604800000L + viewModel.semesterBeginAt + c)))}",
-                    color = if (i== LocalDate.now().dayOfWeek.value){
-                        MaterialTheme.colorScheme.primary}else{MaterialTheme.colorScheme.outline},
+                    "${weekLst[i - 1]}\n${date}",
+                    color = if (date == LocalDate.now()
+                            .format(DateTimeFormatter.ofPattern("MM-dd"))
+                    ) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    },
                     textAlign = TextAlign.Center,
                     fontSize = 12.sp,
                     lineHeight = 14.sp,
@@ -404,22 +374,25 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                                                 .background(
                                                     shape = RoundedCornerShape(4.dp),
                                                     color = if (localCredit >= 4) {
-                                                        Color(0xFFFFC90E)
-                                                    } else if (localCredit == 3.0f) {
-                                                        Color(0xFF3487FF)
-                                                    } else if (localCredit == 2.0f) {
-                                                        Color(0xFF6CE647)
-                                                    } else if (localCredit == 1.0f) {
-                                                        Color(0xFFA4FF90)
+                                                        Color(0xFFFDB349)
+                                                    } else if (localCredit >= 3) {
+                                                        Color(0xFFFFEE58)
+                                                    } else if (localCredit >= 2.5) {
+                                                        Color(0xFFB3EA67)
+                                                    } else if (localCredit >= 2) {
+                                                        Color(0xFF64E8DB)
+                                                    } else if (localCredit >= 1) {
+                                                        Color(0xFFA0EFFF)
                                                     } else {
                                                         Color(0xFFC3C3C3)
                                                     }
                                                 )
-                                                .clickable {
+                                                .clickToExpand { rect ->
                                                     currentTeacher = i.get("teacher").asString
                                                     currentCourse = i.get("name").asString
                                                     currentClassroom = i.get("classroom").asString
                                                     currentCredit = i.get("credits").asString
+                                                    buttonRect = rect
                                                     dialogExpanded = true
                                                 }
                                                 .height(
@@ -428,18 +401,31 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                                                     ).asInt + 1).dp
                                                 )
                                                 .fillMaxWidth()) {
-                                            Column {
+                                            Column(
+                                                verticalArrangement = Arrangement.Center,
+                                                modifier = Modifier.fillMaxSize()
+                                            ) {
                                                 Text(
-                                                    "${i.get("name").asString}@${i.get("classroom").asString}".toCharArray()
-                                                        .joinToString("\u200B"), fontSize = 14.sp
-                                                )
-                                                Text(
-                                                    i.get(
-                                                        "teacher"
-                                                    ).asString,
+                                                    "${i.get("name").asString}@${i.get("classroom").asString}".replace(
+                                                        "（", "("
+                                                    ).replace("）", ")").toCharArray()
+                                                        .joinToString("\u200B"),
                                                     fontSize = 14.sp,
-                                                    color = Color(0xFF666666)
+                                                    lineHeight = 20.sp
                                                 )
+                                                Spacer(Modifier.height(4.dp))
+                                                Row(
+                                                    horizontalArrangement = Arrangement.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        i.get(
+                                                            "teacher"
+                                                        ).asString,
+                                                        fontSize = 14.sp,
+                                                        color = Color(0xFF545454)
+                                                    )
+                                                }
                                             }
                                         }
                                         Spacer(Modifier.height(0.5.dp))
@@ -464,4 +450,74 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
             CircularProgressIndicator(Modifier.size(36.dp))
         }
     }
+    AnimatedExpandDialog(dialogExpanded, buttonRect, rootSize, titleText = currentCourse, text = {
+        Column {
+            Text(
+                "教师: $currentTeacher",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "教室: $currentClassroom",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "学分: $currentCredit",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }, onDismissRequest = { dialogExpanded = false })
+
+    AnimatedExpandDialog(
+        modifyExpanded,
+        addButtonRect,
+        rootSize,
+        onDismissRequest = { modifyExpanded = false },
+        titleText = "修改 authorization",
+        text = {
+            Column {
+                OutlinedTextField(authorization, {
+                    authorization = it
+                    getDetails(authorization)
+                }, placeholder = { Text("Bearer") })
+                val lastRefreshTime = pref.getLong("lastRefresh", 0)
+                if (lastRefreshTime > 0) {
+                    Text(
+                        "上次刷新: ${
+                            formatterFull.format(
+                                Instant.ofEpochMilli(lastRefreshTime)
+                            )
+                        }",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (id.isNotEmpty()) {
+                    Text(
+                        "账号: $id",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (expireTime > 0) {
+                    Text(
+                        "失效时间: ${formatterFull.format(Instant.ofEpochMilli(expireTime * 1000))}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton({
+                pref.edit {
+                    putString("authorization", authorization)
+                    modifyExpanded = false
+                    load = !load
+                }
+            }) { Text("确认") }
+        },
+        dismissButton = { TextButton({ modifyExpanded = false }) { Text("取消") } })
 }

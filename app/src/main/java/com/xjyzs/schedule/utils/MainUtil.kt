@@ -4,6 +4,51 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideIn
+import androidx.compose.animation.slideOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -45,7 +90,7 @@ fun fetchToken(viewModel: MainViewModel): String {
             val jsonStr = String(Base64.decode(jsonBase64, Base64.DEFAULT))
             val jsonObject = Gson().fromJson(jsonStr, JsonObject::class.java)
             val expireTime = jsonObject.get("exp").asLong
-            if (expireTime > System.currentTimeMillis()/1000){
+            if (expireTime > System.currentTimeMillis() / 1000) {
                 break
             }
         }
@@ -131,4 +176,117 @@ suspend fun parseJson(
             Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show()
         }
     }
+}
+
+
+@Composable
+fun AnimatedExpandDialog(
+    showDialog: Boolean,
+    buttonRect: Rect,
+    rootSize: IntSize,
+    onDismissRequest: () -> Unit,
+    titleText: String,
+    confirmButton: @Composable (() -> Unit)={},
+    dismissButton: @Composable (() -> Unit)={},
+    text:@Composable (()-> Unit)
+) {
+    BackHandler(enabled = showDialog) {
+        onDismissRequest()
+    }
+
+    val animationSpec = tween<Float>(durationMillis = 300, easing = FastOutSlowInEasing)
+    val intOffsetAnimationSpec =
+        tween<IntOffset>(durationMillis = 300, easing = FastOutSlowInEasing)
+
+    AnimatedVisibility(
+        visible = showDialog,
+        enter = fadeIn(animationSpec),
+        exit = fadeOut(animationSpec)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .pointerInput(Unit) {
+                    detectTapGestures { onDismissRequest() }
+                }
+        )
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedVisibility(
+            visible = showDialog,
+            enter = fadeIn(animationSpec) +
+                    scaleIn(initialScale = 0.1f, animationSpec = animationSpec) +
+                    slideIn(
+                        animationSpec = intOffsetAnimationSpec,
+                        initialOffset = {
+                            IntOffset(
+                                x = (buttonRect.center.x - rootSize.width / 2f).toInt(),
+                                y = (buttonRect.center.y - rootSize.height / 2f).toInt()
+                            )
+                        }
+                    ),
+            exit = fadeOut(animationSpec) +
+                    scaleOut(targetScale = 0.1f, animationSpec = animationSpec) +
+                    slideOut(
+                        animationSpec = intOffsetAnimationSpec,
+                        targetOffset = {
+                            IntOffset(
+                                x = (buttonRect.center.x - rootSize.width / 2f).toInt(),
+                                y = (buttonRect.center.y - rootSize.height / 2f).toInt()
+                            )
+                        }
+                    )
+        ) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier
+                    .widthIn(min = 280.dp, max = 360.dp)
+                    .padding(all = 24.dp)
+                    .pointerInput(Unit) { detectTapGestures { } },
+                tonalElevation = 6.dp
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        text = titleText,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+//                    Text(
+//                        text = contentText,
+//                        style = MaterialTheme.typography.bodyMedium,
+//                        color = MaterialTheme.colorScheme.onSurfaceVariant
+//                    )
+                    text()
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        dismissButton()
+                        confirmButton()
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+fun Modifier.clickToExpand(onClick: (Rect) -> Unit): Modifier = composed {
+    var myRect by remember { mutableStateOf(Rect.Zero) }
+
+    this
+        .onGloballyPositioned { coordinates ->
+            myRect = coordinates.boundsInRoot()
+        }
+        .clickable {
+            onClick(myRect)
+        }
 }
