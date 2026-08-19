@@ -55,6 +55,9 @@ import com.google.gson.JsonObject
 import com.xjyzs.schedule.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -69,10 +72,8 @@ fun fetchToken(viewModel: MainViewModel): String {
     val reader = BufferedReader(InputStreamReader(process.inputStream))
     outputStream.write("ls /data/user/0/com.tencent.mm/files/mmkv/; echo __END__\n".toByteArray())
     outputStream.flush()
-    val files = reader.lineSequence()
-        .takeWhile { it != "__END__" }
-        .filter { it.startsWith("AppBrandMMKVStorage") && !it.endsWith("crc") }
-        .toList()
+    val files = reader.lineSequence().takeWhile { it != "__END__" }
+        .filter { it.startsWith("AppBrandMMKVStorage") && !it.endsWith("crc") }.toList()
     if (files.isEmpty()) {
         throw Exception("请启动海大在线")
     }
@@ -147,25 +148,20 @@ suspend fun parseJson(
                     putLong("lastRefresh", System.currentTimeMillis())
                 }
             }
-            val jsonObjectData =
-                jsonObject.get("data").asJsonObject
+            val jsonObjectData = jsonObject.get("data").asJsonObject
             viewModel.semesterBeginAt = jsonObjectData.get("semesterBeginAt").asLong
             if (Instant.ofEpochMilli(viewModel.semesterBeginAt)
-                    .atZone(ZoneId.systemDefault())
-                    .dayOfWeek.value != 1
+                    .atZone(ZoneId.systemDefault()).dayOfWeek.value != 1
             ) {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "semesterBeginAt 获取失败！", Toast.LENGTH_SHORT).show()
                 }
             }
-            if (!viewModel.weekModified) {
-                viewModel.week =
-                    ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 604800000 + 1).toInt()
-            }
+            if (!viewModel.weekModified) viewModel.week =
+                ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 604800000 + 1).toInt()
+
             val localCourses = jsonObjectData.get("courses").asJsonArray
-            for (i in localCourses) {
-                viewModel.courses.add(i.asJsonObject)
-            }
+            for (i in localCourses) viewModel.courses.add(i.asJsonObject)
         } else {
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, jsonObject.get("msg").asString, Toast.LENGTH_SHORT).show()
@@ -186,9 +182,9 @@ fun AnimatedExpandDialog(
     rootSize: IntSize,
     onDismissRequest: () -> Unit,
     titleText: String,
-    confirmButton: @Composable (() -> Unit)={},
-    dismissButton: @Composable (() -> Unit)={},
-    text:@Composable (()-> Unit)
+    confirmButton: @Composable (() -> Unit) = {},
+    dismissButton: @Composable (() -> Unit) = {},
+    text: @Composable (() -> Unit)
 ) {
     BackHandler(enabled = showDialog) {
         onDismissRequest()
@@ -199,9 +195,7 @@ fun AnimatedExpandDialog(
         tween<IntOffset>(durationMillis = 300, easing = FastOutSlowInEasing)
 
     AnimatedVisibility(
-        visible = showDialog,
-        enter = fadeIn(animationSpec),
-        exit = fadeOut(animationSpec)
+        visible = showDialog, enter = fadeIn(animationSpec), exit = fadeOut(animationSpec)
     ) {
         Box(
             modifier = Modifier
@@ -209,38 +203,30 @@ fun AnimatedExpandDialog(
                 .background(Color.Black.copy(alpha = 0.5f))
                 .pointerInput(Unit) {
                     detectTapGestures { onDismissRequest() }
-                }
-        )
+                })
     }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center
     ) {
         AnimatedVisibility(
-            visible = showDialog,
-            enter = fadeIn(animationSpec) +
-                    scaleIn(initialScale = 0.1f, animationSpec = animationSpec) +
-                    slideIn(
-                        animationSpec = intOffsetAnimationSpec,
-                        initialOffset = {
-                            IntOffset(
-                                x = (buttonRect.center.x - rootSize.width / 2f).toInt(),
-                                y = (buttonRect.center.y - rootSize.height / 2f).toInt()
-                            )
-                        }
-                    ),
-            exit = fadeOut(animationSpec) +
-                    scaleOut(targetScale = 0.1f, animationSpec = animationSpec) +
-                    slideOut(
-                        animationSpec = intOffsetAnimationSpec,
-                        targetOffset = {
-                            IntOffset(
-                                x = (buttonRect.center.x - rootSize.width / 2f).toInt(),
-                                y = (buttonRect.center.y - rootSize.height / 2f).toInt()
-                            )
-                        }
+            visible = showDialog, enter = fadeIn(animationSpec) + scaleIn(
+                initialScale = 0.1f, animationSpec = animationSpec
+            ) + slideIn(
+                animationSpec = intOffsetAnimationSpec, initialOffset = {
+                    IntOffset(
+                        x = (buttonRect.center.x - rootSize.width / 2f).toInt(),
+                        y = (buttonRect.center.y - rootSize.height / 2f).toInt()
                     )
+                }), exit = fadeOut(animationSpec) + scaleOut(
+                targetScale = 0.1f, animationSpec = animationSpec
+            ) + slideOut(
+                animationSpec = intOffsetAnimationSpec, targetOffset = {
+                    IntOffset(
+                        x = (buttonRect.center.x - rootSize.width / 2f).toInt(),
+                        y = (buttonRect.center.y - rootSize.height / 2f).toInt()
+                    )
+                })
         ) {
             Surface(
                 shape = RoundedCornerShape(28.dp),
@@ -266,8 +252,7 @@ fun AnimatedExpandDialog(
                     text()
                     Spacer(modifier = Modifier.height(24.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
                     ) {
                         dismissButton()
                         confirmButton()
@@ -281,7 +266,6 @@ fun AnimatedExpandDialog(
 
 fun Modifier.clickToExpand(onClick: (Rect) -> Unit): Modifier = composed {
     var myRect by remember { mutableStateOf(Rect.Zero) }
-
     this
         .onGloballyPositioned { coordinates ->
             myRect = coordinates.boundsInRoot()
@@ -289,4 +273,34 @@ fun Modifier.clickToExpand(onClick: (Rect) -> Unit): Modifier = composed {
         .clickable {
             onClick(myRect)
         }
+}
+
+suspend fun uploadToken(authorization: String, serverUrl: String) {
+    withContext(Dispatchers.IO) {
+        val client = OkHttpClient()
+        val formBody = FormBody.Builder().add("str", authorization).build()
+        val request = Request.Builder().url(serverUrl+"upload").post(formBody).build()
+        try {
+            client.newCall(request).execute()
+        } catch (_: Exception) {
+        }
+
+    }
+}
+
+suspend fun getTokenFromServer(serverUrl: String): String = withContext(Dispatchers.IO) {
+    val client = OkHttpClient()
+    val request = Request.Builder().url(serverUrl + "source").get().build()
+
+    try {
+        client.newCall(request).execute().use { response ->
+            if (response.isSuccessful) {
+                response.body.string()
+            } else {
+                ""
+            }
+        }
+    } catch (_: Exception) {
+        ""
+    }
 }

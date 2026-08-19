@@ -32,6 +32,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -66,7 +69,9 @@ import com.xjyzs.schedule.ui.theme.ScheduleTheme
 import com.xjyzs.schedule.utils.AnimatedExpandDialog
 import com.xjyzs.schedule.utils.clickToExpand
 import com.xjyzs.schedule.utils.fetchToken
+import com.xjyzs.schedule.utils.getTokenFromServer
 import com.xjyzs.schedule.utils.parseJson
+import com.xjyzs.schedule.utils.uploadToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -119,6 +124,8 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     var modifyExpanded by remember { mutableStateOf(false) }
     var id by remember { mutableStateOf("") }
     var expireTime by remember { mutableLongStateOf(0) }
+    var clientType by remember { mutableIntStateOf(0) }
+    var serverUrl by remember { mutableStateOf("") }
     val context = LocalContext.current
     val pref = context.getSharedPreferences("main", Context.MODE_PRIVATE)
     var authorization by remember { mutableStateOf("") }
@@ -163,30 +170,41 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
             }
         } catch (_: Exception) {
         }
-    }
-    LaunchedEffect(Unit) {
+        // 服务端同步
+        try {
+            clientType = pref.getInt("clientType", 0)
+            serverUrl = pref.getString("serverUrl", "") ?: ""
+        } catch (_: Exception) {
+        }
+
         viewModel.viewModelScope.launch(Dispatchers.IO) {
             authorization = pref.getString("authorization", "")!!
             getDetails(authorization)
-            if (System.currentTimeMillis() > expireTime * 1000) {
-                try {
-                    authorization = fetchToken(viewModel)
-                } catch (e: Exception) {
-                    if (e.message?.contains("denied") == true || e.message?.contains("run program \"su\"") == true) {
-                        if (!pref.getBoolean("doNotShowRootDialog", false)) {
-                            rootDialogExpanded = true
-                        }
-                    } else {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(
-                                context, e.message, Toast.LENGTH_SHORT
-                            ).show()
+            if (System.currentTimeMillis() > expireTime * 1000) { // 已过期
+                if (clientType == 2) authorization = getTokenFromServer(serverUrl)
+                else {
+                    try {
+                        authorization = fetchToken(viewModel)
+                    } catch (e: Exception) {
+                        if (e.message?.contains("denied") == true || e.message?.contains("run program \"su\"") == true) {
+                            if (!pref.getBoolean("doNotShowRootDialog", false)) {
+                                rootDialogExpanded = true
+                            }
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context, e.message, Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     }
+                    viewModel.isLoading = false
                 }
-                viewModel.isLoading = false
-                pref.edit {
-                    putString("authorization", authorization)
+                if (authorization != pref.getString("authorization", "")) {
+                    pref.edit {
+                        putString("authorization", authorization)
+                    }
+                    if (clientType == 1) uploadToken(authorization, serverUrl)
                 }
                 getDetails(authorization)
             }
@@ -482,6 +500,30 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                     authorization = it
                     getDetails(authorization)
                 }, placeholder = { Text("Bearer") })
+                val options = listOf("None", "发送端", "接收端")
+                SingleChoiceSegmentedButtonRow {
+                    options.forEachIndexed { index, label ->
+                        SegmentedButton(
+                            shape = SegmentedButtonDefaults.itemShape(
+                            index = index, count = options.size
+                        ), onClick = {
+                            if (clientType != index) {
+                                clientType = index
+                                pref.edit(commit = true) {
+                                    putInt("clientType", clientType)
+                                }
+                            }
+                        }, selected = index == clientType, label = { Text(label) })
+                    }
+                }
+                if (clientType != 0) {
+                    OutlinedTextField(serverUrl, {
+                        serverUrl = it
+                        pref.edit {
+                            putString("serverUrl", serverUrl)
+                        }
+                    }, placeholder = { Text("https://example.com/exp/") })
+                }
                 val lastRefreshTime = pref.getLong("lastRefresh", 0)
                 if (lastRefreshTime > 0) {
                     Text(
