@@ -469,22 +469,24 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         }
     }
     AnimatedExpandDialog(dialogExpanded, buttonRect, rootSize, titleText = currentCourse, text = {
-        Column {
-            Text(
-                "教师: $currentTeacher",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "教室: $currentClassroom",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                "学分: $currentCredit",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        SelectionContainer {
+            Column {
+                Text(
+                    "教师: $currentTeacher",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "教室: $currentClassroom",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "学分: $currentCredit",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }, onDismissRequest = { dialogExpanded = false })
 
