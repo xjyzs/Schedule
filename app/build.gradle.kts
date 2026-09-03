@@ -12,8 +12,8 @@ android {
         applicationId = "com.xjyzs.schedule"
         minSdk = 26
         targetSdk = 37
-        versionCode = 8
-        versionName = "1.2"
+        versionCode = 9
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
