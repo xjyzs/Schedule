@@ -390,8 +390,8 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                                         Spacer(Modifier.height(0.5.dp))
                                         Box(
                                             Modifier
+                                                .clip(RoundedCornerShape(4.dp))
                                                 .background(
-                                                    shape = RoundedCornerShape(4.dp),
                                                     color = if (localCredit >= 4) {
                                                         Color(0xFFFDB349)
                                                     } else if (localCredit >= 3) {
