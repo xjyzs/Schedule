@@ -431,6 +431,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                                                     ).replace("）", ")").toCharArray()
                                                         .joinToString("\u200B"),
                                                     fontSize = 14.sp,
+                                                    color = Color.Black,
                                                     lineHeight = 20.sp
                                                 )
                                                 Spacer(Modifier.height(4.dp))
