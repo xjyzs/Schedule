@@ -76,7 +76,7 @@ fun fetchToken(viewModel: MainViewModel): String {
     }
     val re =
         Regex("""https://wx.dlmu.edu.cn/weapp/redirect\?clientid=.*?&token=(?<token>.*?)&go=https""")
-    var token = ""
+    var token: String
     for (i in files) {
         outputStream.write("cat \"/data/user/0/com.tencent.mm/files/mmkv/$i\"; echo __END__\n".toByteArray())
         outputStream.flush()
@@ -285,11 +285,6 @@ fun AnimatedExpandDialog(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-//                    Text(
-//                        text = contentText,
-//                        style = MaterialTheme.typography.bodyMedium,
-//                        color = MaterialTheme.colorScheme.onSurfaceVariant
-//                    )
                     text()
                     Spacer(modifier = Modifier.height(24.dp))
                     Row(

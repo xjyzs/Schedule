@@ -184,8 +184,10 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
             authorization = pref.getString("authorization", "")!!
             getDetails(authorization)
             if (System.currentTimeMillis() > expireTime * 1000) { // 已过期
-                if (clientType == 2) authorization = getTokenFromServer(serverUrl)
-                else {
+                if (clientType == 2) {
+                    val serverAuthorization = getTokenFromServer(serverUrl)
+                    if (serverAuthorization.length > 10) authorization = serverAuthorization
+                } else {
                     try {
                         authorization = fetchToken(viewModel)
                     } catch (e: Exception) {
@@ -272,8 +274,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         IconButton(onClick = {
             if (viewModel.week == viewModel.defaultWeek) modifyExpanded = true
             else viewModel.week = viewModel.defaultWeek
-        },
-            modifier = Modifier.onGloballyPositioned { coordinates ->
+        }, modifier = Modifier.onGloballyPositioned { coordinates ->
             addButtonRect = coordinates.boundsInRoot()
         }) {
             if (viewModel.week == viewModel.defaultWeek) Icon(Icons.Default.Add, null)
@@ -376,7 +377,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                             teacher = json.get("teacher").asString,
                             classroom = classroom,
                             weeks = json.get("weeks").asString.toIntOrNull() ?: 1,
-                            label=json.get("label").asString,
+                            label = json.get("label")?.takeIf { !it.isJsonNull }?.asString ?: "获取失败",
                             weekStrategy = json.get("weekStrategy")
                                 ?.takeIf { !it.isJsonNull }?.asInt ?: 2,
                             startSection = json.get("startSection").asInt,
@@ -390,12 +391,12 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                             displayText = "${name}@${classroom}".replace(
                                 "（", "("
                             ).replace("）", ")").toCharArray().joinToString("\u200B"),
-                            cardColor = when (parsed.significantLevel!!) {
+                            cardColor = when (parsed.significantLevel?: SignificantLevel.MEDIUM) {
                                 SignificantLevel.LOW -> Color(0xFFDDF4E8)
                                 SignificantLevel.MEDIUM -> Color(0xFFFFE8D6)
                                 SignificantLevel.HIGH -> Color(0xFFD6E4FF)
                             },
-                            textColor = when (parsed.significantLevel) {
+                            textColor = when (parsed.significantLevel?: SignificantLevel.MEDIUM) {
                                 SignificantLevel.LOW -> Color(0xFF4D7C59)
                                 SignificantLevel.MEDIUM -> Color(0xFF9C5353)
                                 SignificantLevel.HIGH -> Color(0xFF2E4A6E)
@@ -510,9 +511,9 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                 CourseDetailRow("教师", currentTeacher)
                 CourseDetailRow("教室", currentClassroom)
                 CourseDetailRow("上课周", currentLabel)
-                CourseDetailRow("教师 ID", currentTeacherId,false)
-                CourseDetailRow("学期", currentSemester,false)
-                CourseDetailRow("ID", currentId,false)
+                CourseDetailRow("教师 ID", currentTeacherId, false)
+                CourseDetailRow("学期", currentSemester, false)
+                CourseDetailRow("ID", currentId, false)
             }
         }
     }, onDismissRequest = { dialogExpanded = false })
