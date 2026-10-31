@@ -17,7 +17,6 @@ import androidx.compose.animation.slideOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -52,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import com.xjyzs.schedule.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -70,7 +67,7 @@ fun fetchToken(viewModel: MainViewModel): String {
     val process = ProcessBuilder("su", "-M").start()
     val outputStream = process.outputStream
     val reader = BufferedReader(InputStreamReader(process.inputStream))
-    outputStream.write("ls /data/user/0/com.tencent.mm/files/mmkv/; echo __END__\n".toByteArray())
+    outputStream.write("ls -t /data/user/0/com.tencent.mm/files/mmkv/; echo __END__\n".toByteArray())
     outputStream.flush()
     val files = reader.lineSequence().takeWhile { it != "__END__" }
         .filter { it.startsWith("AppBrandMMKVStorage") && !it.endsWith("crc") }.toList()
@@ -92,11 +89,11 @@ fun fetchToken(viewModel: MainViewModel): String {
             val jsonObject = Gson().fromJson(jsonStr, JsonObject::class.java)
             val expireTime = jsonObject.get("exp").asLong
             if (expireTime > System.currentTimeMillis() / 1000) {
-                break
+                return "Bearer $token"
             }
         }
     }
-    return "Bearer $token"
+    return "Bearer "
 }
 
 private fun readBytesUntil(ins: InputStream, marker: String): ByteArray {
@@ -157,8 +154,12 @@ suspend fun parseJson(
                     Toast.makeText(context, "semesterBeginAt 获取失败！", Toast.LENGTH_SHORT).show()
                 }
             }
-            if (!viewModel.weekModified) viewModel.week =
-                ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 604800000 + 1).toInt()
+            if (!viewModel.weekModified) {
+                val week =
+                    ((System.currentTimeMillis() - viewModel.semesterBeginAt) / 604800000 + 1).toInt()
+                viewModel.week = week
+                viewModel.defaultWeek = week
+            }
 
             val localCourses = jsonObjectData.get("courses").asJsonArray
             for (i in localCourses) viewModel.courses.add(i.asJsonObject)
@@ -172,6 +173,46 @@ suspend fun parseJson(
             Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show()
         }
     }
+}
+
+enum class SignificantLevel(val level: Int) {
+    LOW(0), MEDIUM(1), HIGH(2)
+}
+
+data class IdResult(
+    val semester: String? = null,
+    val teacherId: String? = null,
+    val significantLevel: SignificantLevel? = null,
+)
+
+fun parseId(id: String?): IdResult {
+    if (id == null) return IdResult()
+
+    val semesterRegex = Regex("""\d{4}-\d{4}-\d""")
+    val match = semesterRegex.find(id) ?: return IdResult()
+
+    val semester = match.value
+    val prefix = id.substring(0, match.range.first)
+    val suffix = id.substring(match.range.last + 1)
+
+    val teacherId = if (suffix.length > 6) {
+        suffix.dropLast(6)
+    } else null
+
+
+    val significantLevel = if (prefix.length > 6) {
+        val taskCode = prefix.drop(6)
+        when {
+            taskCode.length <= 5 -> SignificantLevel.LOW
+            taskCode[1] == '1' -> SignificantLevel.HIGH
+            taskCode[2] == '2' -> SignificantLevel.MEDIUM
+            else -> SignificantLevel.MEDIUM
+        }
+    } else null
+
+    return IdResult(
+        semester = semester, teacherId = teacherId, significantLevel = significantLevel
+    )
 }
 
 
@@ -275,11 +316,27 @@ fun Modifier.clickToExpand(onClick: (Rect) -> Unit): Modifier = composed {
         }
 }
 
+@Composable
+fun CourseDetailRow(key: String, value: String, isImportant: Boolean = true) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "$key ",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isImportant) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 suspend fun uploadToken(authorization: String, serverUrl: String) {
     withContext(Dispatchers.IO) {
         val client = OkHttpClient()
         val formBody = FormBody.Builder().add("str", authorization).build()
-        val request = Request.Builder().url(serverUrl+"upload").post(formBody).build()
+        val request = Request.Builder().url(serverUrl + "upload").post(formBody).build()
         try {
             client.newCall(request).execute()
         } catch (_: Exception) {

@@ -1,8 +1,7 @@
 package com.xjyzs.schedule
 
 import android.content.Context
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.text.selection.SelectionContainer
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.widget.Toast
@@ -24,8 +23,10 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,12 +45,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
@@ -62,16 +63,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.times
 import androidx.core.content.edit
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.xjyzs.schedule.ui.theme.ScheduleTheme
 import com.xjyzs.schedule.utils.AnimatedExpandDialog
+import com.xjyzs.schedule.utils.CourseDetailRow
+import com.xjyzs.schedule.utils.CourseUiModel
+import com.xjyzs.schedule.utils.MainViewModel
+import com.xjyzs.schedule.utils.SignificantLevel
 import com.xjyzs.schedule.utils.clickToExpand
 import com.xjyzs.schedule.utils.fetchToken
 import com.xjyzs.schedule.utils.getTokenFromServer
+import com.xjyzs.schedule.utils.parseId
 import com.xjyzs.schedule.utils.parseJson
 import com.xjyzs.schedule.utils.uploadToken
 import kotlinx.coroutines.Dispatchers
@@ -84,15 +89,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-
-class MainViewModel : ViewModel() {
-    var isLoading by mutableStateOf(true)
-    val courses = mutableStateListOf<JsonObject>()
-    var semesterBeginAt by mutableLongStateOf(0)
-    var week by mutableIntStateOf(1)
-    var weekModified by mutableStateOf(false)
-    var enablePageSwitchAnimation by mutableStateOf(false)
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,10 +115,15 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     var rootSize by remember { mutableStateOf(IntSize.Zero) }
     var dialogExpanded by remember { mutableStateOf(false) }
     var rootDialogExpanded by remember { mutableStateOf(false) }
+
     var currentCourse by remember { mutableStateOf("") }
     var currentTeacher by remember { mutableStateOf("") }
     var currentClassroom by remember { mutableStateOf("") }
-    var currentCredit by remember { mutableStateOf("") }
+    var currentLabel by remember { mutableStateOf("") }
+    var currentId by remember { mutableStateOf("") }
+    var currentTeacherId by remember { mutableStateOf("") }
+    var currentSemester by remember { mutableStateOf("") }
+
     var modifyExpanded by remember { mutableStateOf(false) }
     var id by remember { mutableStateOf("") }
     var expireTime by remember { mutableLongStateOf(0) }
@@ -228,7 +229,7 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                 Request.Builder().url("https://wx.dlmu.edu.cn/weapp/api/v1/academic/courseTake")
                     .get().addHeader(
                         "User-Agent",
-                        "Mozilla/5.0 (Linux; Android 15; 22041216C Build/AP3A.240617.008; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 XWEB/1160117 MMWEBSDK/20250201 MMWEBID/8832 MicroMessenger/8.0.60.2840(0x28003C40) WeChat/arm64 Weixin GPVersion/1 NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android"
+                        "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL} Build/${Build.ID}; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 XWEB/1160117 MMWEBSDK/20250201 MMWEBID/8832 MicroMessenger/8.0.60.2840(0x28003C40) WeChat/arm64 Weixin GPVersion/1 NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android"
                     ).addHeader("Accept-Encoding", "gzip,compress,br,deflate").addHeader(
                         "authorization", authorization
                     ).addHeader("charset", "utf-8").addHeader("x-client-version", "1.4.18")
@@ -268,12 +269,15 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
             .fillMaxSize()
             .onGloballyPositioned { rootSize = it.size })
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        IconButton(
-            onClick = { modifyExpanded = true },
+        IconButton(onClick = {
+            if (viewModel.week == viewModel.defaultWeek) modifyExpanded = true
+            else viewModel.week = viewModel.defaultWeek
+        },
             modifier = Modifier.onGloballyPositioned { coordinates ->
-                addButtonRect = coordinates.boundsInRoot()
-            }) {
-            Icon(Icons.Default.Add, null)
+            addButtonRect = coordinates.boundsInRoot()
+        }) {
+            if (viewModel.week == viewModel.defaultWeek) Icon(Icons.Default.Add, null)
+            else Icon(Icons.AutoMirrored.Filled.KeyboardReturn, null)
         }
     }
     if (rootDialogExpanded) {
@@ -321,18 +325,15 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
         Row {
             Spacer(Modifier.size(36.dp))
             var c = 0
-            for (i in 1..weekLst.size) {
+            for (i in weekLst.indices) {
                 val date =
                     formatter.format(Instant.ofEpochMilli(((viewModel.week - 1) * 604800000L + viewModel.semesterBeginAt + c)))
                 Text(
-                    "${weekLst[i - 1]}\n${date}",
+                    "${weekLst[i]}\n${date}",
                     color = if (date == LocalDate.now()
                             .format(DateTimeFormatter.ofPattern("MM-dd"))
-                    ) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outline
-                    },
+                    ) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outline,
                     textAlign = TextAlign.Center,
                     fontSize = 12.sp,
                     lineHeight = 14.sp,
@@ -362,63 +363,100 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                         c += 1
                     }
                 }
+
+
+                val mergedCourses = remember(viewModel.courses.toList()) {
+                    viewModel.courses.map { json ->
+                        val id = json.get("id")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                        val parsed = parseId(id)
+                        val name = json.get("name").asString
+                        val classroom = json.get("classroom").asString
+                        CourseUiModel(
+                            name = name,
+                            teacher = json.get("teacher").asString,
+                            classroom = classroom,
+                            weeks = json.get("weeks").asString.toIntOrNull() ?: 1,
+                            label=json.get("label").asString,
+                            weekStrategy = json.get("weekStrategy")
+                                ?.takeIf { !it.isJsonNull }?.asInt ?: 2,
+                            startSection = json.get("startSection").asInt,
+                            endSection = json.get("endSection").asInt,
+                            range = json.get("range").asString,
+                            id = id,
+                            teacherId = parsed.teacherId ?: "获取失败",
+                            semester = parsed.semester ?: "获取失败",
+                            significantLevel = parsed.significantLevel ?: SignificantLevel.MEDIUM,
+
+                            displayText = "${name}@${classroom}".replace(
+                                "（", "("
+                            ).replace("）", ")").toCharArray().joinToString("\u200B"),
+                            cardColor = when (parsed.significantLevel!!) {
+                                SignificantLevel.LOW -> Color(0xFFDDF4E8)
+                                SignificantLevel.MEDIUM -> Color(0xFFFFE8D6)
+                                SignificantLevel.HIGH -> Color(0xFFD6E4FF)
+                            },
+                            textColor = when (parsed.significantLevel) {
+                                SignificantLevel.LOW -> Color(0xFF4D7C59)
+                                SignificantLevel.MEDIUM -> Color(0xFF9C5353)
+                                SignificantLevel.HIGH -> Color(0xFF2E4A6E)
+                            },
+
+                            )
+                    }.groupBy { course ->
+                        // 是否为同一节课
+                        "${course.name}_${course.classroom}_${course.weeks}_${course.startSection}_${course.endSection}_${course.range}"
+                    }.values.map { duplicates ->
+                        // 合并
+                        val base = duplicates.first()
+                        base.copy(
+                            teacher = duplicates.map { it.teacher }.distinct().joinToString(", "),
+                            teacherId = duplicates.map { it.teacherId }.distinct()
+                                .joinToString(", ")
+                        )
+                    }
+                }
+
+
                 HorizontalPager(state = pagerState) { pageIndex ->
                     Box(
                         Modifier
                             .fillMaxWidth()
                             .height(h.dp * timeLst.size)
                     ) {
-                        for (i in viewModel.courses) {
-                            if (i.get("startWeek").asInt <= pageIndex + 1 && i.get("endWeek").asInt >= pageIndex + 1 && (i.get(
-                                    "weekStrategy"
-                                ).asInt == 2 || i.get("weekStrategy").asInt == 1 && (pageIndex + 1) % 2 == 1 || i.get(
-                                    "weekStrategy"
-                                ).asInt == 0 && (pageIndex + 1) % 2 == 0)
+                        mergedCourses.forEach { i ->
+                            if (i.range.getOrElse(
+                                    pageIndex,
+                                    { '0' }) != '0' && (i.weekStrategy == 2 || i.weekStrategy == 1 && (pageIndex + 1) % 2 == 1 || i.weekStrategy == 0 && (pageIndex + 1) % 2 == 0)
                             ) {
                                 Row {
-                                    if (i.get("weeks").asInt != 1) {
-                                        Spacer(Modifier.weight(i.get("weeks").asFloat - 1))
-                                    }
+                                    if (i.weeks != 1) Spacer(Modifier.weight(i.weeks.toFloat() - 1))
+
                                     Column(
                                         Modifier
                                             .weight(1f)
                                             .padding(1.dp)
                                     ) {
-                                        val localCredit = i.get("credits").asFloat
-                                        if (i.get("startSection").asInt != 1) {
-                                            Spacer(Modifier.height(h * (i.get("startSection").asInt - 1).dp))
-                                        }
+                                        if (i.startSection != 1) Spacer(Modifier.height(h * (i.startSection - 1).dp))
                                         Spacer(Modifier.height(0.5.dp))
                                         Box(
                                             Modifier
                                                 .clip(RoundedCornerShape(4.dp))
                                                 .background(
-                                                    color = if (localCredit >= 4) {
-                                                        Color(0xFFFDB349)
-                                                    } else if (localCredit >= 3) {
-                                                        Color(0xFFFFEE58)
-                                                    } else if (localCredit >= 2.5) {
-                                                        Color(0xFFB3EA67)
-                                                    } else if (localCredit >= 2) {
-                                                        Color(0xFF64E8DB)
-                                                    } else if (localCredit >= 1) {
-                                                        Color(0xFFA0EFFF)
-                                                    } else {
-                                                        Color(0xFFC3C3C3)
-                                                    }
+                                                    color = i.cardColor
                                                 )
                                                 .clickToExpand { rect ->
-                                                    currentTeacher = i.get("teacher").asString
-                                                    currentCourse = i.get("name").asString
-                                                    currentClassroom = i.get("classroom").asString
-                                                    currentCredit = i.get("credits").asString
+                                                    currentTeacher = i.teacher
+                                                    currentCourse = i.name
+                                                    currentClassroom = i.classroom
+                                                    currentLabel = i.label
+                                                    currentId = i.id
+                                                    currentTeacherId = i.teacherId
+                                                    currentSemester = i.semester
                                                     buttonRect = rect
                                                     dialogExpanded = true
                                                 }
                                                 .height(
-                                                    (h - 1) * (i.get("endSection").asInt - i.get(
-                                                        "startSection"
-                                                    ).asInt + 1).dp
+                                                    (h - 1) * (i.endSection - i.startSection + 1).dp
                                                 )
                                                 .fillMaxWidth()) {
                                             Column(
@@ -426,12 +464,9 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                                                 modifier = Modifier.fillMaxSize()
                                             ) {
                                                 Text(
-                                                    "${i.get("name").asString}@${i.get("classroom").asString}".replace(
-                                                        "（", "("
-                                                    ).replace("）", ")").toCharArray()
-                                                        .joinToString("\u200B"),
+                                                    i.displayText,
                                                     fontSize = 14.sp,
-                                                    color = Color.Black,
+                                                    color = i.textColor,
                                                     lineHeight = 20.sp
                                                 )
                                                 Spacer(Modifier.height(4.dp))
@@ -440,19 +475,17 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                                                     modifier = Modifier.fillMaxWidth()
                                                 ) {
                                                     Text(
-                                                        i.get(
-                                                            "teacher"
-                                                        ).asString,
+                                                        i.teacher,
                                                         fontSize = 14.sp,
-                                                        color = Color(0xFF545454)
+                                                        color = i.textColor
                                                     )
                                                 }
                                             }
                                         }
                                         Spacer(Modifier.height(0.5.dp))
                                     }
-                                    if (i.get("weeks").asInt != 7) {
-                                        Spacer(Modifier.weight(7 - i.get("weeks").asFloat))
+                                    if (i.weeks != 7) {
+                                        Spacer(Modifier.weight((7 - i.weeks).toFloat()))
                                     }
                                 }
                             }
@@ -474,21 +507,12 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
     AnimatedExpandDialog(dialogExpanded, buttonRect, rootSize, titleText = currentCourse, text = {
         SelectionContainer {
             Column {
-                Text(
-                    "教师: $currentTeacher",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "教室: $currentClassroom",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "学分: $currentCredit",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                CourseDetailRow("教师", currentTeacher)
+                CourseDetailRow("教室", currentClassroom)
+                CourseDetailRow("上课周", currentLabel)
+                CourseDetailRow("教师 ID", currentTeacherId,false)
+                CourseDetailRow("学期", currentSemester,false)
+                CourseDetailRow("ID", currentId,false)
             }
         }
     }, onDismissRequest = { dialogExpanded = false })
