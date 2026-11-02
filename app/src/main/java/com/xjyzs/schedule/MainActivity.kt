@@ -189,7 +189,8 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                     if (serverAuthorization.length > 10) authorization = serverAuthorization
                 } else {
                     try {
-                        authorization = fetchToken(viewModel)
+                        val newAuthorization = fetchToken(viewModel)
+                        if (newAuthorization.length > 10) authorization = newAuthorization
                     } catch (e: Exception) {
                         if (e.message?.contains("denied") == true || e.message?.contains("run program \"su\"") == true) {
                             if (!pref.getBoolean("doNotShowRootDialog", false)) {
@@ -377,7 +378,8 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                             teacher = json.get("teacher").asString,
                             classroom = classroom,
                             weeks = json.get("weeks").asString.toIntOrNull() ?: 1,
-                            label = json.get("label")?.takeIf { !it.isJsonNull }?.asString ?: "获取失败",
+                            label = json.get("label")?.takeIf { !it.isJsonNull }?.asString
+                                ?: "获取失败",
                             weekStrategy = json.get("weekStrategy")
                                 ?.takeIf { !it.isJsonNull }?.asInt ?: 2,
                             startSection = json.get("startSection").asInt,
@@ -391,12 +393,12 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                             displayText = "${name}@${classroom}".replace(
                                 "（", "("
                             ).replace("）", ")").toCharArray().joinToString("\u200B"),
-                            cardColor = when (parsed.significantLevel?: SignificantLevel.MEDIUM) {
+                            cardColor = when (parsed.significantLevel ?: SignificantLevel.MEDIUM) {
                                 SignificantLevel.LOW -> Color(0xFFDDF4E8)
                                 SignificantLevel.MEDIUM -> Color(0xFFFFE8D6)
                                 SignificantLevel.HIGH -> Color(0xFFD6E4FF)
                             },
-                            textColor = when (parsed.significantLevel?: SignificantLevel.MEDIUM) {
+                            textColor = when (parsed.significantLevel ?: SignificantLevel.MEDIUM) {
                                 SignificantLevel.LOW -> Color(0xFF4D7C59)
                                 SignificantLevel.MEDIUM -> Color(0xFF9C5353)
                                 SignificantLevel.HIGH -> Color(0xFF2E4A6E)
@@ -535,15 +537,15 @@ fun MainUI(modifier: Modifier = Modifier, viewModel: MainViewModel) {
                     options.forEachIndexed { index, label ->
                         SegmentedButton(
                             shape = SegmentedButtonDefaults.itemShape(
-                            index = index, count = options.size
-                        ), onClick = {
-                            if (clientType != index) {
-                                clientType = index
-                                pref.edit(commit = true) {
-                                    putInt("clientType", clientType)
+                                index = index, count = options.size
+                            ), onClick = {
+                                if (clientType != index) {
+                                    clientType = index
+                                    pref.edit(commit = true) {
+                                        putInt("clientType", clientType)
+                                    }
                                 }
-                            }
-                        }, selected = index == clientType, label = { Text(label) })
+                            }, selected = index == clientType, label = { Text(label) })
                     }
                 }
                 if (clientType != 0) {
